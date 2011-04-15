@@ -57,6 +57,7 @@ import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexer;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
 import fr.paris.lutece.portal.service.content.XPageAppService;
 import fr.paris.lutece.portal.service.plugin.Plugin;
+import fr.paris.lutece.portal.service.search.SearchItem;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPathService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
@@ -75,7 +76,6 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_INDEXER_ENABLE = "calendar-solr.indexer.enable";
     private static final String SITE = AppPropertiesService.getProperty( "lutece.name" );
     private static final String BLANK = " ";
-    private static final String TYPE = "CALENDAR";
     private static final String PROPERTY_DESCRIPTION_MAX_CHARACTERS = "calendar-solr.description.max.characters";
     private static final String PROPERTY_DESCRIPTION_ETC = "...";
 
@@ -154,23 +154,6 @@ public class SolrCalendarIndexer implements SolrIndexer
     }
     
     /**
-     * Generate the log line for the specified {@link SolrItem}
-     * @param item The {@link SolrItem}
-     * @return The string representing the log line
-     */
-    private String getLog(SolrItem item){
-        StringBuilder sbLogs = new StringBuilder(  );
-        sbLogs.append( "indexing " );
-        sbLogs.append( item.getType() );
-        sbLogs.append( " id : " );
-        sbLogs.append( item.getUid(  ));
-        sbLogs.append( " Title : " );
-        sbLogs.append( item.getTitle(  ) );
-        sbLogs.append( "<br/>" );
-        return sbLogs.toString();
-    }
-
-    /**
      * Builds a {@link SolrItem} which will be used by solr during the indexing of the calendar list
      *
      * @param nIdFaq The {@link Faq} Id
@@ -214,7 +197,7 @@ public class SolrCalendarIndexer implements SolrIndexer
 
         // Setting the Uid field
         String strIdEvent = String.valueOf( occurrence.getId(  ) );
-        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME );
+        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME  );
 
         // Setting the date field
         item.setDate( occurrence.getDate(  ) );
@@ -266,7 +249,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         item.setSite( SITE );
 
         // Setting the type field
-        item.setType( CalendarPlugin.PLUGIN_NAME );
+        item.setType(CalendarPlugin.PLUGIN_NAME );
 
         // return the item
         return item;
@@ -300,5 +283,22 @@ public class SolrCalendarIndexer implements SolrIndexer
     public List<Field> getAdditionalFields(  )
     {
         return null;
+    }
+    
+    /**
+     * Generate the log line for the specified {@link SolrItem}
+     * @param item The {@link SolrItem}
+     * @return The string representing the log line
+     */
+    private String getLog(SolrItem item){
+        StringBuilder sbLogs = new StringBuilder(  );
+        sbLogs.append( "indexing " );
+        sbLogs.append( item.getType() );
+        sbLogs.append( " id : " );
+        sbLogs.append( item.getUid(  ));
+        sbLogs.append( " Title : " );
+        sbLogs.append( item.getTitle(  ) );
+        sbLogs.append( "<br/>" );
+        return sbLogs.toString();
     }
 }
