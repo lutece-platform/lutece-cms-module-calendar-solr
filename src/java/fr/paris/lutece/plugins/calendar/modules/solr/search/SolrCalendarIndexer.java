@@ -42,9 +42,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.lucene.demo.html.HTMLParser;
-
 import fr.paris.lutece.plugins.calendar.business.Event;
 import fr.paris.lutece.plugins.calendar.business.OccurrenceEvent;
 import fr.paris.lutece.plugins.calendar.business.category.Category;
@@ -57,7 +55,6 @@ import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexer;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
 import fr.paris.lutece.portal.service.content.XPageAppService;
 import fr.paris.lutece.portal.service.plugin.Plugin;
-import fr.paris.lutece.portal.service.search.SearchItem;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPathService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
@@ -74,10 +71,27 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_NAME = "calendar-solr.indexer.name";
     private static final String PROPERTY_VERSION = "calendar-solr.indexer.version";
     private static final String PROPERTY_INDEXER_ENABLE = "calendar-solr.indexer.enable";
-    private static final String SITE = AppPropertiesService.getProperty( "lutece.name" );
     private static final String BLANK = " ";
     private static final String PROPERTY_DESCRIPTION_MAX_CHARACTERS = "calendar-solr.description.max.characters";
     private static final String PROPERTY_DESCRIPTION_ETC = "...";
+
+    // Site name
+    private static final String PROPERTY_SITE = "lutece.name";
+    private static final String PROPERTY_PROD_URL = "lutece.prod.url";
+    private String _strSite;
+    private String _strProdUrl;
+
+    public SolrCalendarIndexer(  )
+    {
+        super(  );
+        _strSite = AppPropertiesService.getProperty( PROPERTY_SITE );
+        _strProdUrl = AppPropertiesService.getProperty( PROPERTY_PROD_URL );
+
+        if ( !_strProdUrl.endsWith( "/" ) )
+        {
+            _strProdUrl = _strProdUrl + "/";
+        }
+    }
 
     public String getDescription(  )
     {
@@ -139,7 +153,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         {
             String strPortalUrl = AppPathService.getPortalUrl(  );
 
-            UrlItem urlEvent = new UrlItem( strPortalUrl );
+            UrlItem urlEvent = new UrlItem( _strProdUrl + strPortalUrl );
             urlEvent.addParameter( XPageAppService.PARAM_XPAGE_APP, CalendarPlugin.PLUGIN_NAME );
             urlEvent.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
             urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
@@ -147,12 +161,12 @@ public class SolrCalendarIndexer implements SolrIndexer
 
             SolrItem docSubject = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), strAgenda );
 
-            items.put(getLog(docSubject), docSubject );
+            items.put( getLog( docSubject ), docSubject );
         }
 
         return items;
     }
-    
+
     /**
      * Builds a {@link SolrItem} which will be used by solr during the indexing of the calendar list
      *
@@ -197,7 +211,7 @@ public class SolrCalendarIndexer implements SolrIndexer
 
         // Setting the Uid field
         String strIdEvent = String.valueOf( occurrence.getId(  ) );
-        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME  );
+        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME );
 
         // Setting the date field
         item.setDate( occurrence.getDate(  ) );
@@ -244,12 +258,12 @@ public class SolrCalendarIndexer implements SolrIndexer
 
         // Setting the title field
         item.setTitle( occurrence.getTitle(  ) );
-        
+
         // Setting the Site field
-        item.setSite( SITE );
+        item.setSite( _strSite );
 
         // Setting the type field
-        item.setType(CalendarPlugin.PLUGIN_NAME );
+        item.setType( CalendarPlugin.PLUGIN_NAME );
 
         // return the item
         return item;
@@ -284,21 +298,23 @@ public class SolrCalendarIndexer implements SolrIndexer
     {
         return null;
     }
-    
+
     /**
      * Generate the log line for the specified {@link SolrItem}
      * @param item The {@link SolrItem}
      * @return The string representing the log line
      */
-    private String getLog(SolrItem item){
+    private String getLog( SolrItem item )
+    {
         StringBuilder sbLogs = new StringBuilder(  );
         sbLogs.append( "indexing " );
-        sbLogs.append( item.getType() );
+        sbLogs.append( item.getType(  ) );
         sbLogs.append( " id : " );
-        sbLogs.append( item.getUid(  ));
+        sbLogs.append( item.getUid(  ) );
         sbLogs.append( " Title : " );
         sbLogs.append( item.getTitle(  ) );
         sbLogs.append( "<br/>" );
-        return sbLogs.toString();
+
+        return sbLogs.toString(  );
     }
 }
