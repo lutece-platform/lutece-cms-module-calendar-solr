@@ -4,7 +4,7 @@
     
     <!-- Plugin Informations -->
     <name>calendar-solr</name>
-    <class>fr.paris.lutece.plugins.calendar.modules.solr.service.CalendarSolrPlugin</class>
+    <class>fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation</class>
     <version>1.0.0-SNAPSHOT</version>
     <documentation></documentation>
     <installation></installation>

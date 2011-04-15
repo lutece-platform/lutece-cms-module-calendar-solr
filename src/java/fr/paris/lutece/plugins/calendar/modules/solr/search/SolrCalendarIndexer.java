@@ -38,17 +38,25 @@ import java.io.Reader;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+
 import org.apache.lucene.demo.html.HTMLParser;
-import org.apache.solr.client.solrj.SolrServer;
-import org.apache.solr.client.solrj.SolrServerException;
+
 import fr.paris.lutece.plugins.calendar.business.Event;
+import fr.paris.lutece.plugins.calendar.business.OccurrenceEvent;
+import fr.paris.lutece.plugins.calendar.business.category.Category;
 import fr.paris.lutece.plugins.calendar.service.AgendaResource;
+import fr.paris.lutece.plugins.calendar.service.CalendarPlugin;
 import fr.paris.lutece.plugins.calendar.service.Utils;
 import fr.paris.lutece.plugins.calendar.web.Constants;
-import fr.paris.lutece.plugins.search.solr.business.SolrServerService;
+import fr.paris.lutece.plugins.search.solr.business.field.Field;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexer;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
+import fr.paris.lutece.portal.service.content.XPageAppService;
+import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPathService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
@@ -66,9 +74,10 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_VERSION = "calendar-solr.indexer.version";
     private static final String PROPERTY_INDEXER_ENABLE = "calendar-solr.indexer.enable";
     private static final String SITE = AppPropertiesService.getProperty( "lutece.name" );
-    private static final SolrServer SOLR_SERVER = SolrServerService.getInstance(  ).getSolrServer(  );
     private static final String BLANK = " ";
     private static final String TYPE = "CALENDAR";
+    private static final String PROPERTY_DESCRIPTION_MAX_CHARACTERS = "calendar-solr.description.max.characters";
+    private static final String PROPERTY_DESCRIPTION_ETC = "...";
 
     public String getDescription(  )
     {
@@ -85,169 +94,138 @@ public class SolrCalendarIndexer implements SolrIndexer
         return AppPropertiesService.getProperty( PROPERTY_VERSION );
     }
 
-    public String index(  )
+    public Map<String, SolrItem> index(  )
     {
-        StringBuilder sbLogs = new StringBuilder(  );
+        Map<String, SolrItem> items = new HashMap<String, SolrItem>(  );
+        String sRoleKey = "";
 
-        //Page page;
         for ( AgendaResource agenda : Utils.getAgendaResourcesWithOccurrences(  ) )
         {
-            try
+            sRoleKey = agenda.getRole(  );
+
+            String strAgenda = agenda.getId(  );
+
+            for ( Object oEvent : agenda.getAgenda(  ).getEvents(  ) )
             {
-                sbLogs.append( "indexing " );
-                sbLogs.append( TYPE );
-                sbLogs.append( " id : " );
-                sbLogs.append( agenda.getId(  ) );
-                sbLogs.append( " Name : " );
-                sbLogs.append( agenda.getName(  ) );
-                sbLogs.append( "<br/>" );
-
-                Collection<SolrItem> items = new ArrayList<SolrItem>(  );
-
-                getItems( agenda );
-
-                SOLR_SERVER.addBeans( items );
-
-                SOLR_SERVER.commit(  );
+                try
+                {
+                    items.putAll( indexSubject( oEvent, sRoleKey, strAgenda ) );
+                }
+                catch ( IOException e )
+                {
+                    AppLogService.error( e );
+                }
             }
-            catch ( IOException e )
-            {
-                AppLogService.error( e );
-            }
-            catch ( SolrServerException e )
-            {
-                AppLogService.error( e );
-            }
-        }
-
-        return sbLogs.toString(  );
-    }
-
-    /**
-     * Builds a {@link SolrItem} which will be used by Solr during the indexing of the agenda and his events
-     * @return the {@link SolrItem} collection
-     * @param agenda The {@link AgendaResource} to index
-     * @throws IOException The IO Exception
-     */
-    private Collection<SolrItem> getItems( AgendaResource agenda )
-        throws IOException
-    {
-        // the item
-        Collection<SolrItem> items = new ArrayList<SolrItem>(  );
-        SolrItem item = new SolrItem(  );
-
-        // Setting the URL field
-        UrlItem url = new UrlItem( AppPathService.getPortalUrl(  ) ); //FIXME relative path OK ?
-        url.addParameter( Constants.PARAMETER_PAGE, Constants.PLUGIN_NAME );
-        url.addParameter( Constants.PARAMETER_CALENDAR_ID, agenda.getId(  ) );
-        item.setUrl( url.getUrl(  ) );
-
-        // Setting the Date field
-        //No creation/modification date available in agenda
-
-        // Setting the Uid field
-        item.setUid( agenda.getId(  ) );
-
-        // Setting the Title field
-        item.setTitle( agenda.getName(  ) );
-
-        // Setting the Site field
-        item.setSite( SITE );
-
-        // Setting the Summary field
-        //No summary available in agenda
-
-        // Setting the Type field
-        item.setType( TYPE );
-
-        // Setting the XmlContent field
-        //No XmlContent available in agenda
-
-        // Setting the Categorie field
-        //No Categorie available in agenda
-
-        // Setting the HieDate field
-        //No HieDate available in agenda
-
-        // Setting the Role field
-        item.setRole( agenda.getRole(  ) );
-
-        //Setting the Content field
-        //No Content available in agenda, get the agenda name
-        item.setContent( agenda.getName(  ) );
-
-        items.add( item );
-
-        //Add SolrItem for each events 
-        for ( Event oEvent : (List<Event>) agenda.getAgenda(  ).getEvents(  ) )
-        {
-            items.add( getItem( agenda, oEvent ) );
         }
 
         return items;
     }
 
     /**
-     * Builds a {@link SolrItem} which will be used by Solr during the indexing of the agenda events
-     * @return the {@link SolrItem} corresponding to the indexed event
-     * @param agenda The {@link AgendaResource}
-     * @param event The event to index
-     * @throws IOException The IO Exception
+     * Recursive method for indexing a calendar event
+     *
+     * @param faq the faq linked to the subject
+     * @param subject the subject
+     * @throws IOException I/O Exception
      */
-    private SolrItem getItem( AgendaResource agenda, Event event )
+    private Map<String, SolrItem> indexSubject( Object oEvent, String sRoleKey, String strAgenda )
         throws IOException
     {
-        // the item
+        Map<String, SolrItem> items = new HashMap<String, SolrItem>(  );
+        OccurrenceEvent occurrence = (OccurrenceEvent) oEvent;
+
+        if ( occurrence.getStatus(  )
+                           .equals( AppPropertiesService.getProperty( Constants.PROPERTY_EVENT_STATUS_CONFIRMED ) ) )
+        {
+            String strPortalUrl = AppPathService.getPortalUrl(  );
+
+            UrlItem urlEvent = new UrlItem( strPortalUrl );
+            urlEvent.addParameter( XPageAppService.PARAM_XPAGE_APP, CalendarPlugin.PLUGIN_NAME );
+            urlEvent.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
+            urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
+            urlEvent.addParameter( Constants.PARAM_AGENDA, strAgenda );
+
+            SolrItem docSubject = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), strAgenda );
+
+            items.put(getLog(docSubject), docSubject );
+        }
+
+        return items;
+    }
+    
+    /**
+     * Generate the log line for the specified {@link SolrItem}
+     * @param item The {@link SolrItem}
+     * @return The string representing the log line
+     */
+    private String getLog(SolrItem item){
+        StringBuilder sbLogs = new StringBuilder(  );
+        sbLogs.append( "indexing " );
+        sbLogs.append( item.getType() );
+        sbLogs.append( " id : " );
+        sbLogs.append( item.getUid(  ));
+        sbLogs.append( " Title : " );
+        sbLogs.append( item.getTitle(  ) );
+        sbLogs.append( "<br/>" );
+        return sbLogs.toString();
+    }
+
+    /**
+     * Builds a {@link SolrItem} which will be used by solr during the indexing of the calendar list
+     *
+     * @param nIdFaq The {@link Faq} Id
+     * @param strUrl the url of the subject
+     * @param strRoleKey The role key
+     * @param plugin The {@link Plugin}
+     * @param strAgenda the calendar id
+     * @return A Solr item containing QuestionAnswer Data
+     * @throws IOException The IO Exception
+     */
+    private SolrItem getDocument( OccurrenceEvent occurrence, String strRoleKey, String strUrl, String strAgenda )
+        throws IOException
+    {
+        // make a new, empty document
         SolrItem item = new SolrItem(  );
 
-        // Setting the URL field
-        UrlItem url = new UrlItem( AppPathService.getPortalUrl(  ) ); //FIXME relative path OK ?
-        url.addParameter( Constants.PARAMETER_PAGE, Constants.PLUGIN_NAME );
-        url.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
-        url.addParameter( Constants.PARAMETER_CALENDAR_ID, event.getIdCalendar(  ) );
-        url.addParameter( Constants.PARAMETER_EVENT_ID, event.getId(  ) );
-        item.setUrl( url.getUrl(  ) );
+        //add the id of the calendar
+        //        doc.add( new Field( Constants.FIELD_CALENDAR_ID, strAgenda + "_" + Constants.CALENDAR_SHORT_NAME,
+        //                Field.Store.NO, Field.Index.NOT_ANALYZED ) );
 
-        // Setting the Date field
-        //No creation/modification date available in agenda
+        //add the category of the event
+        Collection<Category> arrayCategories = occurrence.getListCategories(  );
+        List<String> listCategories = new ArrayList<String>(  );
 
-        // Setting the Uid field
-        item.setUid( Integer.toString( event.getId(  ) ) );
+        if ( arrayCategories != null )
+        {
+            Iterator<Category> i = arrayCategories.iterator(  );
 
-        // Setting the Title field
-        item.setTitle( event.getTitle(  ) );
-
-        // Setting the Site field
-        item.setSite( SITE );
-
-        // Setting the Summary field
-        //No summary available in agenda
-
-        // Setting the Type field
-        item.setType( TYPE );
-
-        // Setting the XmlContent field
-        //No XmlContent available in agenda
+            while ( i.hasNext(  ) )
+                listCategories.add( i.next(  ).getName(  ) );
+        }
 
         // Setting the Categorie field
-        //No Categorie available in agenda
-
-        // Setting the HieDate field
-        //No HieDate available in agenda
+        item.setCategorie( listCategories );
 
         // Setting the Role field
-        item.setRole( agenda.getRole(  ) );
+        item.setRole( strRoleKey );
 
-        //Setting the Content field
-        String strContentToIndex = "";
-        strContentToIndex += ( event.getDescription(  ) + BLANK );
-        strContentToIndex += ( event.getLocationAddress(  ) + BLANK );
-        strContentToIndex += ( event.getLocationTown(  ) + BLANK );
-        strContentToIndex += ( event.getLocationZip(  ) + BLANK );
+        // Setting the Url field
+        item.setUrl( strUrl );
 
+        // Setting the Uid field
+        String strIdEvent = String.valueOf( occurrence.getId(  ) );
+        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME );
+
+        // Setting the date field
+        item.setDate( occurrence.getDate(  ) );
+
+        // Setting the content field
+        String strContentToIndex = getContentToIndex( occurrence );
         StringReader readerPage = new StringReader( strContentToIndex );
         HTMLParser parser = new HTMLParser( readerPage );
 
+        //the content of the event descriptionr is recovered in the parser because this one
+        //had replaced the encoded caracters (as &eacute;) by the corresponding special caracter (as ?)
         Reader reader = parser.getReader(  );
         int c;
         StringBuffer sb = new StringBuffer(  );
@@ -260,11 +238,67 @@ public class SolrCalendarIndexer implements SolrIndexer
         reader.close(  );
         item.setContent( sb.toString(  ) );
 
+        // Setting the summary field
+        // Add the description as a summary field, so that index can be incrementally maintained.
+        // This field is stored, but it is not indexed
+        String strDescription = occurrence.getDescription(  );
+        strDescription = Utils.ParseHtmlToPlainTextString( strDescription );
+
+        try
+        {
+            strDescription = strDescription.substring( 0,
+                    AppPropertiesService.getPropertyInt( PROPERTY_DESCRIPTION_MAX_CHARACTERS, 200 ) ) +
+                PROPERTY_DESCRIPTION_ETC;
+        }
+        catch ( StringIndexOutOfBoundsException e )
+        {
+        }
+        catch ( NullPointerException e )
+        {
+        }
+
+        item.setSummary( strDescription );
+
+        // Setting the title field
+        item.setTitle( occurrence.getTitle(  ) );
+        
+        // Setting the Site field
+        item.setSite( SITE );
+
+        // Setting the type field
+        item.setType( CalendarPlugin.PLUGIN_NAME );
+
+        // return the item
         return item;
+    }
+
+    /**
+     * Set the Content to index (Description, location)
+     * @param  The Event
+     * @return The content to index
+     */
+    private String getContentToIndex( Event event )
+    {
+        StringBuffer sbContentToIndex = new StringBuffer(  );
+        //Do not index question here
+        sbContentToIndex.append( event.getDescription(  ) );
+        sbContentToIndex.append( BLANK );
+        sbContentToIndex.append( event.getLocationAddress(  ) );
+        sbContentToIndex.append( BLANK );
+        sbContentToIndex.append( event.getLocationTown(  ) );
+        sbContentToIndex.append( BLANK );
+        sbContentToIndex.append( event.getLocationZip(  ) );
+
+        return sbContentToIndex.toString(  );
     }
 
     public boolean isEnable(  )
     {
         return "true".equalsIgnoreCase( AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE ) );
+    }
+
+    public List<Field> getAdditionalFields(  )
+    {
+        return null;
     }
 }

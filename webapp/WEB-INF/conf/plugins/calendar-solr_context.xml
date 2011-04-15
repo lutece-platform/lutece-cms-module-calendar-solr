@@ -4,6 +4,6 @@
 <beans>
     
   <!--                      Search Engine                    -->  
-  <bean id="calendarSolrIndexer" class="fr.paris.lutece.plugins.calendar.modules.solr.search.SolrCalendarIndexer" />
+  <bean id="solr.calendarSolrIndexer" class="fr.paris.lutece.plugins.calendar.modules.solr.search.SolrCalendarIndexer" />
   
 </beans>
