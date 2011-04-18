@@ -42,7 +42,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+
 import org.apache.lucene.demo.html.HTMLParser;
+
 import fr.paris.lutece.plugins.calendar.business.Agenda;
 import fr.paris.lutece.plugins.calendar.business.CalendarHome;
 import fr.paris.lutece.plugins.calendar.business.Event;
@@ -78,6 +80,9 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String BLANK = " ";
     private static final String PROPERTY_DESCRIPTION_MAX_CHARACTERS = "calendar-solr.description.max.characters";
     private static final String PROPERTY_DESCRIPTION_ETC = "...";
+    private static final String PROPERTY_CALENDAR_ID_LABEL = "calendar-solr.indexer.calendar_id.label";
+    private static final String PROPERTY_CALENDAR_ID_DESCRIPTION = "calendar-solr.indexer.calendar_id.description";
+
 
     // Site name
     private static final String PROPERTY_SITE = "lutece.name";
@@ -186,7 +191,15 @@ public class SolrCalendarIndexer implements SolrIndexer
 
     public List<Field> getAdditionalFields(  )
     {
-        return new ArrayList<Field>(  );
+        List<Field> fields = new ArrayList<Field>(  );
+        Field field = new Field(  );
+        field.setEnableFacet( false );
+        field.setName( Constants.FIELD_CALENDAR_ID );
+        field.setLabel( AppPropertiesService.getProperty( PROPERTY_CALENDAR_ID_LABEL ) );
+        field.setDescription( AppPropertiesService.getProperty( PROPERTY_CALENDAR_ID_DESCRIPTION ) );
+        fields.add( field );
+
+        return fields;
     }
 
     /**
@@ -239,8 +252,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         SolrItem item = new SolrItem(  );
 
         //add the id of the calendar
-        //        doc.add( new Field( Constants.FIELD_CALENDAR_ID, strAgenda + "_" + Constants.CALENDAR_SHORT_NAME,
-        //                Field.Store.NO, Field.Index.NOT_ANALYZED ) );
+        item.addDynamicField( Constants.FIELD_CALENDAR_ID, strAgenda + "_" + Constants.CALENDAR_SHORT_NAME );
 
         //add the category of the event
         Collection<Category> arrayCategories = occurrence.getListCategories(  );
