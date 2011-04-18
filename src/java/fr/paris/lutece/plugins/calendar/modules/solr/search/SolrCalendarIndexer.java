@@ -43,8 +43,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import org.apache.lucene.demo.html.HTMLParser;
+import fr.paris.lutece.plugins.calendar.business.Agenda;
+import fr.paris.lutece.plugins.calendar.business.CalendarHome;
 import fr.paris.lutece.plugins.calendar.business.Event;
 import fr.paris.lutece.plugins.calendar.business.OccurrenceEvent;
+import fr.paris.lutece.plugins.calendar.business.SimpleEvent;
 import fr.paris.lutece.plugins.calendar.business.category.Category;
 import fr.paris.lutece.plugins.calendar.service.AgendaResource;
 import fr.paris.lutece.plugins.calendar.service.CalendarPlugin;
@@ -55,6 +58,7 @@ import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexer;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
 import fr.paris.lutece.portal.service.content.XPageAppService;
 import fr.paris.lutece.portal.service.plugin.Plugin;
+import fr.paris.lutece.portal.service.plugin.PluginService;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPathService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
@@ -133,6 +137,56 @@ public class SolrCalendarIndexer implements SolrIndexer
         }
 
         return items;
+    }
+
+    /**
+     * Get the calendar document
+     * @param strDocument id of the subject to index
+     * @return The list of Solr items
+     * @throws IOException the exception
+     */
+    public List<SolrItem> getDocuments( String strDocument )
+        throws IOException
+    {
+        List<SolrItem> listDocs = new ArrayList<SolrItem>(  );
+        String strPortalUrl = AppPathService.getPortalUrl(  );
+        Plugin plugin = PluginService.getPlugin( CalendarPlugin.PLUGIN_NAME );
+
+        OccurrenceEvent occurrence = CalendarHome.findOccurrence( Integer.parseInt( strDocument ), plugin );
+        SimpleEvent event = CalendarHome.findEvent( occurrence.getEventId(  ), plugin );
+
+        if ( !event.getStatus(  ).equals( AppPropertiesService.getProperty( Constants.PROPERTY_EVENT_STATUS_CONFIRMED ) ) )
+        {
+            return null;
+        }
+
+        AgendaResource agendaResource = CalendarHome.findAgendaResource( event.getIdCalendar(  ), plugin );
+        Utils.loadAgendaOccurrences( agendaResource, plugin );
+
+        String sRoleKey = agendaResource.getRole(  );
+        Agenda agenda = agendaResource.getAgenda(  );
+
+        UrlItem urlEvent = new UrlItem( strPortalUrl );
+        urlEvent.addParameter( XPageAppService.PARAM_XPAGE_APP, CalendarPlugin.PLUGIN_NAME );
+        urlEvent.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
+        urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
+        urlEvent.addParameter( Constants.PARAM_AGENDA, agenda.getKeyName(  ) );
+
+        SolrItem docEvent = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), agenda.getKeyName(  ) );
+
+        listDocs.add( docEvent );
+
+        return listDocs;
+    }
+
+    public boolean isEnable(  )
+    {
+        return "true".equalsIgnoreCase( AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE ) );
+    }
+
+    public List<Field> getAdditionalFields(  )
+    {
+        return new ArrayList<Field>(  );
     }
 
     /**
@@ -287,16 +341,6 @@ public class SolrCalendarIndexer implements SolrIndexer
         sbContentToIndex.append( event.getLocationZip(  ) );
 
         return sbContentToIndex.toString(  );
-    }
-
-    public boolean isEnable(  )
-    {
-        return "true".equalsIgnoreCase( AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE ) );
-    }
-
-    public List<Field> getAdditionalFields(  )
-    {
-        return null;
     }
 
     /**
