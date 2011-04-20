@@ -33,18 +33,6 @@
  */
 package fr.paris.lutece.plugins.calendar.modules.solr.search;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.lucene.demo.html.HTMLParser;
-
 import fr.paris.lutece.plugins.calendar.business.Agenda;
 import fr.paris.lutece.plugins.calendar.business.CalendarHome;
 import fr.paris.lutece.plugins.calendar.business.Event;
@@ -54,17 +42,31 @@ import fr.paris.lutece.plugins.calendar.business.category.Category;
 import fr.paris.lutece.plugins.calendar.service.AgendaResource;
 import fr.paris.lutece.plugins.calendar.service.CalendarPlugin;
 import fr.paris.lutece.plugins.calendar.service.Utils;
+import fr.paris.lutece.plugins.calendar.utils.CalendarIndexerUtils;
 import fr.paris.lutece.plugins.calendar.web.Constants;
 import fr.paris.lutece.plugins.search.solr.business.field.Field;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexer;
+import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexerService;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
+import fr.paris.lutece.plugins.search.solr.util.SolrConstants;
 import fr.paris.lutece.portal.service.content.XPageAppService;
+import fr.paris.lutece.portal.service.message.SiteMessageException;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginService;
-import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPathService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import fr.paris.lutece.util.url.UrlItem;
+
+import org.apache.lucene.demo.html.HTMLParser;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -82,7 +84,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_DESCRIPTION_ETC = "...";
     private static final String PROPERTY_CALENDAR_ID_LABEL = "calendar-solr.indexer.calendar_id.label";
     private static final String PROPERTY_CALENDAR_ID_DESCRIPTION = "calendar-solr.indexer.calendar_id.description";
-
+    private static final List<String> LIST_RESSOURCES_NAME = new ArrayList<String>(  );
 
     // Site name
     private static final String PROPERTY_SITE = "lutece.name";
@@ -100,26 +102,39 @@ public class SolrCalendarIndexer implements SolrIndexer
         {
             _strProdUrl = _strProdUrl + "/";
         }
+
+        LIST_RESSOURCES_NAME.add( CalendarIndexerUtils.CONSTANT_TYPE_RESOURCE );
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public String getDescription(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_DESCRIPTION );
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public String getName(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_NAME );
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public String getVersion(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_VERSION );
     }
 
-    public Map<String, SolrItem> index(  )
+    /**
+     * {@inheritDoc}
+     */
+    public void indexDocuments(  ) throws IOException, InterruptedException, SiteMessageException
     {
-        Map<String, SolrItem> items = new HashMap<String, SolrItem>(  );
         String sRoleKey = "";
 
         for ( AgendaResource agenda : Utils.getAgendaResourcesWithOccurrences(  ) )
@@ -130,18 +145,9 @@ public class SolrCalendarIndexer implements SolrIndexer
 
             for ( Object oEvent : agenda.getAgenda(  ).getEvents(  ) )
             {
-                try
-                {
-                    items.putAll( indexSubject( oEvent, sRoleKey, strAgenda ) );
-                }
-                catch ( IOException e )
-                {
-                    AppLogService.error( e );
-                }
+                indexSubject( oEvent, sRoleKey, strAgenda );
             }
         }
-
-        return items;
     }
 
     /**
@@ -151,19 +157,20 @@ public class SolrCalendarIndexer implements SolrIndexer
      * @throws IOException the exception
      */
     public List<SolrItem> getDocuments( String strDocument )
-        throws IOException
     {
         List<SolrItem> listDocs = new ArrayList<SolrItem>(  );
         String strPortalUrl = AppPathService.getPortalUrl(  );
         Plugin plugin = PluginService.getPlugin( CalendarPlugin.PLUGIN_NAME );
 
         OccurrenceEvent occurrence = CalendarHome.findOccurrence( Integer.parseInt( strDocument ), plugin );
-        SimpleEvent event = CalendarHome.findEvent( occurrence.getEventId(  ), plugin );
 
-        if ( !event.getStatus(  ).equals( AppPropertiesService.getProperty( Constants.PROPERTY_EVENT_STATUS_CONFIRMED ) ) )
+        if ( !occurrence.getStatus(  )
+                            .equals( AppPropertiesService.getProperty( Constants.PROPERTY_EVENT_STATUS_CONFIRMED ) ) )
         {
             return null;
         }
+
+        SimpleEvent event = CalendarHome.findEvent( occurrence.getEventId(  ), plugin );
 
         AgendaResource agendaResource = CalendarHome.findAgendaResource( event.getIdCalendar(  ), plugin );
         Utils.loadAgendaOccurrences( agendaResource, plugin );
@@ -177,18 +184,32 @@ public class SolrCalendarIndexer implements SolrIndexer
         urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
         urlEvent.addParameter( Constants.PARAM_AGENDA, agenda.getKeyName(  ) );
 
-        SolrItem docEvent = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), agenda.getKeyName(  ) );
+        SolrItem docEvent;
 
-        listDocs.add( docEvent );
+        try
+        {
+            docEvent = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), agenda.getKeyName(  ) );
+            listDocs.add( docEvent );
+        }
+        catch ( IOException e )
+        {
+            throw new RuntimeException( e );
+        }
 
         return listDocs;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public boolean isEnable(  )
     {
         return "true".equalsIgnoreCase( AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE ) );
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public List<Field> getAdditionalFields(  )
     {
         List<Field> fields = new ArrayList<Field>(  );
@@ -209,10 +230,9 @@ public class SolrCalendarIndexer implements SolrIndexer
      * @param subject the subject
      * @throws IOException I/O Exception
      */
-    private Map<String, SolrItem> indexSubject( Object oEvent, String sRoleKey, String strAgenda )
+    private void indexSubject( Object oEvent, String sRoleKey, String strAgenda )
         throws IOException
     {
-        Map<String, SolrItem> items = new HashMap<String, SolrItem>(  );
         OccurrenceEvent occurrence = (OccurrenceEvent) oEvent;
 
         if ( occurrence.getStatus(  )
@@ -228,10 +248,8 @@ public class SolrCalendarIndexer implements SolrIndexer
 
             SolrItem docSubject = getDocument( occurrence, sRoleKey, urlEvent.getUrl(  ), strAgenda );
 
-            items.put( getLog( docSubject ), docSubject );
+            SolrIndexerService.write( docSubject );
         }
-
-        return items;
     }
 
     /**
@@ -277,7 +295,7 @@ public class SolrCalendarIndexer implements SolrIndexer
 
         // Setting the Uid field
         String strIdEvent = String.valueOf( occurrence.getId(  ) );
-        item.setUid( strIdEvent + "_" + Constants.CALENDAR_SHORT_NAME );
+        item.setUid( getResourceUid( strIdEvent, CalendarIndexerUtils.CONSTANT_TYPE_RESOURCE ) );
 
         // Setting the date field
         item.setDate( occurrence.getDate(  ) );
@@ -356,21 +374,21 @@ public class SolrCalendarIndexer implements SolrIndexer
     }
 
     /**
-     * Generate the log line for the specified {@link SolrItem}
-     * @param item The {@link SolrItem}
-     * @return The string representing the log line
-     */
-    private String getLog( SolrItem item )
+         * {@inheritDoc}
+         */
+    public List<String> getResourcesName(  )
     {
-        StringBuilder sbLogs = new StringBuilder(  );
-        sbLogs.append( "indexing " );
-        sbLogs.append( item.getType(  ) );
-        sbLogs.append( " id : " );
-        sbLogs.append( item.getUid(  ) );
-        sbLogs.append( " Title : " );
-        sbLogs.append( item.getTitle(  ) );
-        sbLogs.append( "<br/>" );
+        return LIST_RESSOURCES_NAME;
+    }
 
-        return sbLogs.toString(  );
+    /**
+     * {@inheritDoc}
+     */
+    public String getResourceUid( String strResourceId, String strResourceType )
+    {
+        StringBuffer sb = new StringBuffer( strResourceId );
+        sb.append( SolrConstants.CONSTANT_UNDERSCORE ).append( Constants.CALENDAR_SHORT_NAME );
+
+        return sb.toString(  );
     }
 }
