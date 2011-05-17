@@ -86,22 +86,9 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_CALENDAR_ID_DESCRIPTION = "calendar-solr.indexer.calendar_id.description";
     private static final List<String> LIST_RESSOURCES_NAME = new ArrayList<String>(  );
 
-    // Site name
-    private static final String PROPERTY_SITE = "lutece.name";
-    private static final String PROPERTY_PROD_URL = "lutece.prod.url";
-    private String _strSite;
-    private String _strProdUrl;
-
     public SolrCalendarIndexer(  )
     {
         super(  );
-        _strSite = AppPropertiesService.getProperty( PROPERTY_SITE );
-        _strProdUrl = AppPropertiesService.getProperty( PROPERTY_PROD_URL );
-
-        if ( !_strProdUrl.endsWith( "/" ) )
-        {
-            _strProdUrl = _strProdUrl + "/";
-        }
 
         LIST_RESSOURCES_NAME.add( CalendarIndexerUtils.CONSTANT_TYPE_RESOURCE );
     }
@@ -159,7 +146,6 @@ public class SolrCalendarIndexer implements SolrIndexer
     public List<SolrItem> getDocuments( String strDocument )
     {
         List<SolrItem> listDocs = new ArrayList<SolrItem>(  );
-        String strPortalUrl = AppPathService.getPortalUrl(  );
         Plugin plugin = PluginService.getPlugin( CalendarPlugin.PLUGIN_NAME );
 
         OccurrenceEvent occurrence = CalendarHome.findOccurrence( Integer.parseInt( strDocument ), plugin );
@@ -178,7 +164,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         String sRoleKey = agendaResource.getRole(  );
         Agenda agenda = agendaResource.getAgenda(  );
 
-        UrlItem urlEvent = new UrlItem( strPortalUrl );
+        UrlItem urlEvent = new UrlItem( SolrIndexerService.getBaseUrl(  ) );
         urlEvent.addParameter( XPageAppService.PARAM_XPAGE_APP, CalendarPlugin.PLUGIN_NAME );
         urlEvent.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
         urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
@@ -238,9 +224,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         if ( occurrence.getStatus(  )
                            .equals( AppPropertiesService.getProperty( Constants.PROPERTY_EVENT_STATUS_CONFIRMED ) ) )
         {
-            String strPortalUrl = AppPathService.getPortalUrl(  );
-
-            UrlItem urlEvent = new UrlItem( _strProdUrl + strPortalUrl );
+            UrlItem urlEvent = new UrlItem( SolrIndexerService.getBaseUrl(  ) );
             urlEvent.addParameter( XPageAppService.PARAM_XPAGE_APP, CalendarPlugin.PLUGIN_NAME );
             urlEvent.addParameter( Constants.PARAMETER_ACTION, Constants.ACTION_SHOW_RESULT );
             urlEvent.addParameter( Constants.PARAMETER_EVENT_ID, occurrence.getEventId(  ) );
@@ -344,7 +328,7 @@ public class SolrCalendarIndexer implements SolrIndexer
         item.setTitle( occurrence.getTitle(  ) );
 
         // Setting the Site field
-        item.setSite( _strSite );
+        item.setSite( SolrIndexerService.getWebAppName(  ) );
 
         // Setting the type field
         item.setType( CalendarPlugin.PLUGIN_NAME );
