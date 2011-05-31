@@ -33,6 +33,16 @@
  */
 package fr.paris.lutece.plugins.calendar.modules.solr.search;
 
+import java.io.IOException;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
+
+import org.apache.lucene.demo.html.HTMLParser;
+
 import fr.paris.lutece.plugins.calendar.business.Agenda;
 import fr.paris.lutece.plugins.calendar.business.CalendarHome;
 import fr.paris.lutece.plugins.calendar.business.Event;
@@ -50,23 +60,11 @@ import fr.paris.lutece.plugins.search.solr.indexer.SolrIndexerService;
 import fr.paris.lutece.plugins.search.solr.indexer.SolrItem;
 import fr.paris.lutece.plugins.search.solr.util.SolrConstants;
 import fr.paris.lutece.portal.service.content.XPageAppService;
-import fr.paris.lutece.portal.service.message.SiteMessageException;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginService;
-import fr.paris.lutece.portal.service.util.AppPathService;
+import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import fr.paris.lutece.util.url.UrlItem;
-
-import org.apache.lucene.demo.html.HTMLParser;
-
-import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
 
 
 /**
@@ -86,6 +84,8 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_CALENDAR_ID_DESCRIPTION = "calendar-solr.indexer.calendar_id.description";
     private static final List<String> LIST_RESSOURCES_NAME = new ArrayList<String>(  );
 
+    private static final String EVENT_INDEXATION_ERROR = "[SolrCalendarIndexer] An error occured during the indexation of the event number ";
+    
     public SolrCalendarIndexer(  )
     {
         super(  );
@@ -120,10 +120,12 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
-    public void indexDocuments(  ) throws IOException, InterruptedException, SiteMessageException
+    public List<String> indexDocuments(  )
     {
         String sRoleKey = "";
 
+        List<String> lstErrors = new ArrayList<String>(  );
+        
         for ( AgendaResource agenda : Utils.getAgendaResourcesWithOccurrences(  ) )
         {
             sRoleKey = agenda.getRole(  );
@@ -132,9 +134,19 @@ public class SolrCalendarIndexer implements SolrIndexer
 
             for ( Object oEvent : agenda.getAgenda(  ).getEvents(  ) )
             {
-                indexSubject( oEvent, sRoleKey, strAgenda );
+            	try
+				{
+            		indexSubject( oEvent, sRoleKey, strAgenda );
+				}
+				catch ( Exception e )
+				{
+					lstErrors.add( SolrIndexerService.buildErrorMessage( e ) );
+					AppLogService.error( EVENT_INDEXATION_ERROR + ( (Event) oEvent ).getId(  ), e );
+				}
             }
         }
+        
+        return lstErrors;
     }
 
     /**
