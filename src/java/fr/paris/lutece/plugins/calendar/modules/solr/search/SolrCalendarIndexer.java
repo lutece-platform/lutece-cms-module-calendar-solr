@@ -33,16 +33,6 @@
  */
 package fr.paris.lutece.plugins.calendar.modules.solr.search;
 
-import java.io.IOException;
-import java.io.Reader;
-import java.io.StringReader;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-
-import org.apache.lucene.demo.html.HTMLParser;
-
 import fr.paris.lutece.plugins.calendar.business.Agenda;
 import fr.paris.lutece.plugins.calendar.business.CalendarHome;
 import fr.paris.lutece.plugins.calendar.business.Event;
@@ -62,9 +52,27 @@ import fr.paris.lutece.plugins.search.solr.util.SolrConstants;
 import fr.paris.lutece.portal.service.content.XPageAppService;
 import fr.paris.lutece.portal.service.plugin.Plugin;
 import fr.paris.lutece.portal.service.plugin.PluginService;
+import fr.paris.lutece.portal.service.util.AppException;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import fr.paris.lutece.util.url.UrlItem;
+
+import org.apache.tika.exception.TikaException;
+import org.apache.tika.metadata.Metadata;
+import org.apache.tika.parser.ParseContext;
+import org.apache.tika.parser.html.HtmlParser;
+import org.apache.tika.sax.BodyContentHandler;
+
+import org.xml.sax.ContentHandler;
+import org.xml.sax.SAXException;
+
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.List;
 
 
 /**
@@ -83,9 +91,8 @@ public class SolrCalendarIndexer implements SolrIndexer
     private static final String PROPERTY_CALENDAR_ID_LABEL = "calendar-solr.indexer.calendar_id.label";
     private static final String PROPERTY_CALENDAR_ID_DESCRIPTION = "calendar-solr.indexer.calendar_id.description";
     private static final List<String> LIST_RESSOURCES_NAME = new ArrayList<String>(  );
-
     private static final String EVENT_INDEXATION_ERROR = "[SolrCalendarIndexer] An error occured during the indexation of the event number ";
-    
+
     public SolrCalendarIndexer(  )
     {
         super(  );
@@ -96,6 +103,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public String getDescription(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_DESCRIPTION );
@@ -104,6 +112,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public String getName(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_NAME );
@@ -112,6 +121,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public String getVersion(  )
     {
         return AppPropertiesService.getProperty( PROPERTY_VERSION );
@@ -120,12 +130,13 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public List<String> indexDocuments(  )
     {
         String sRoleKey = "";
 
         List<String> lstErrors = new ArrayList<String>(  );
-        
+
         for ( AgendaResource agenda : Utils.getAgendaResourcesWithOccurrences(  ) )
         {
             sRoleKey = agenda.getRole(  );
@@ -134,18 +145,18 @@ public class SolrCalendarIndexer implements SolrIndexer
 
             for ( Object oEvent : agenda.getAgenda(  ).getEvents(  ) )
             {
-            	try
-				{
-            		indexSubject( oEvent, sRoleKey, strAgenda );
-				}
-				catch ( Exception e )
-				{
-					lstErrors.add( SolrIndexerService.buildErrorMessage( e ) );
-					AppLogService.error( EVENT_INDEXATION_ERROR + ( (Event) oEvent ).getId(  ), e );
-				}
+                try
+                {
+                    indexSubject( oEvent, sRoleKey, strAgenda );
+                }
+                catch ( Exception e )
+                {
+                    lstErrors.add( SolrIndexerService.buildErrorMessage( e ) );
+                    AppLogService.error( EVENT_INDEXATION_ERROR + ( (Event) oEvent ).getId(  ), e );
+                }
             }
         }
-        
+
         return lstErrors;
     }
 
@@ -153,8 +164,8 @@ public class SolrCalendarIndexer implements SolrIndexer
      * Get the calendar document
      * @param strDocument id of the subject to index
      * @return The list of Solr items
-     * @throws IOException the exception
      */
+    @Override
     public List<SolrItem> getDocuments( String strDocument )
     {
         List<SolrItem> listDocs = new ArrayList<SolrItem>(  );
@@ -200,6 +211,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public boolean isEnable(  )
     {
         return "true".equalsIgnoreCase( AppPropertiesService.getProperty( PROPERTY_INDEXER_ENABLE ) );
@@ -208,6 +220,7 @@ public class SolrCalendarIndexer implements SolrIndexer
     /**
      * {@inheritDoc}
      */
+    @Override
     public List<Field> getAdditionalFields(  )
     {
         List<Field> fields = new ArrayList<Field>(  );
@@ -298,28 +311,30 @@ public class SolrCalendarIndexer implements SolrIndexer
 
         // Setting the content field
         String strContentToIndex = getContentToIndex( occurrence );
-        StringReader readerPage = new StringReader( strContentToIndex );
-        HTMLParser parser = new HTMLParser( readerPage );
+        ContentHandler handler = new BodyContentHandler(  );
+        Metadata metadata = new Metadata(  );
 
-        //the content of the event descriptionr is recovered in the parser because this one
-        //had replaced the encoded caracters (as &eacute;) by the corresponding special caracter (as ?)
-        Reader reader = parser.getReader(  );
-        int c;
-        StringBuffer sb = new StringBuffer(  );
-
-        while ( ( c = reader.read(  ) ) != -1 )
+        try
         {
-            sb.append( String.valueOf( (char) c ) );
+            new HtmlParser(  ).parse( new ByteArrayInputStream( strContentToIndex.getBytes(  ) ), handler, metadata,
+                new ParseContext(  ) );
+        }
+        catch ( SAXException e )
+        {
+            throw new AppException( "Error during page parsing." );
+        }
+        catch ( TikaException e )
+        {
+            throw new AppException( "Error during page parsing." );
         }
 
-        reader.close(  );
-        item.setContent( sb.toString(  ) );
+        item.setContent( handler.toString(  ) );
 
         // Setting the summary field
         // Add the description as a summary field, so that index can be incrementally maintained.
         // This field is stored, but it is not indexed
         String strDescription = occurrence.getDescription(  );
-        strDescription = Utils.ParseHtmlToPlainTextString( strDescription );
+        strDescription = Utils.parseHtmlToPlainTextString( strDescription );
 
         try
         {
