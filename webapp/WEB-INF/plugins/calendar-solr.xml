@@ -12,7 +12,7 @@
     <provider>module.calendar.solr.module.provider</provider>
     <provider-url>http://lutece.paris.fr</provider-url>
     <icon-url>images/admin/skin/plugins/calendar/modules/solr/calendar-solr.png</icon-url>
-    <copyright>Copyright 2001-2011 Mairie de Paris</copyright>
+    <copyright>Copyright 2001-2014 Mairie de Paris</copyright>
 	<core-version-dependency>
 		<min-core-version>5.0.0</min-core-version>
 		<max-core-version/>	
