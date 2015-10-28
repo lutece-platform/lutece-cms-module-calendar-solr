@@ -10,7 +10,7 @@
 	<groupId>fr.paris.lutece.plugins</groupId>
 	<artifactId>module-calendar-solr</artifactId>
 	<packaging>lutece-plugin</packaging>
-	<version>2.0.0-SNAPSHOT</version>
+	<version>2.0.0</version>
 	<name>Module calendar Solr</name>
 
 	<repositories>
@@ -54,5 +54,6 @@
         <connection>scm:git:https://github.com/lutece-platform/lutece-cms-module-calendar-solr.git</connection>
         <developerConnection>scm:git:https://github.com/lutece-platform/lutece-cms-module-calendar-solr.git</developerConnection>
         <url>http://dev.lutece.paris.fr/viewvc/lutece/portal/trunk/plugins/cms/module-calendar-solr</url>
-    </scm>
+      <tag>lutece-cms-module-calendar-solr-2.0.0</tag>
+  </scm>
 </project>
